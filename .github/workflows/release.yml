@@ -41,7 +41,7 @@ jobs:
       - name: build
         run: |
           export RUSTFLAGS="-Z strip=symbols"
-          cross build --target ${{ matrix.target }}
+          cross build --release --target ${{ matrix.target }}
 
       - name: rename and compress artifacts
         if: ${{ matrix.target == 'x86_64-pc-windows-gnu' }}
