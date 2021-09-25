@@ -1,0 +1,206 @@
+name: releases
+
+on:
+  push:
+    tags:
+      - v*
+
+jobs:
+  build-bin-cross:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - mips-unknown-linux-musl
+            #          - mipsel-unknown-linux-musl
+          - x86_64-unknown-linux-musl
+            #          - i686-unknown-linux-musl
+          - aarch64-unknown-linux-musl
+            #          - arm-unknown-linux-musleabi
+            #          - armv7-unknown-linux-musleabihf
+          - x86_64-pc-windows-gnu
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - name: install rust toolchain
+        uses: hecrj/setup-rust-action@v1
+        with:
+          rust-version: nightly
+
+      - name: install deps
+        run: |
+          sudo apt update && sudo apt install make -y
+
+      - name: install cross
+        run: |
+          cargo install cross
+
+      - name: build
+        run: |
+          export RUSTFLAGS="-Z strip=symbols"
+          ./misc/build_cross.sh ${{ matrix.target }}
+
+      - name: rename and compress artifacts
+        if: ${{ matrix.target == 'x86_64-pc-windows-gnu' }}
+        run: |
+          mv target/${{ matrix.target }}/release/tcpping.exe tcpping-${{ matrix.target }}.exe
+
+      - name: rename and compress artifacts
+        if: ${{ matrix.target != 'x86_64-pc-windows-gnu' }}
+        run: |
+          mv target/${{ matrix.target }}/release/tcpping tcpping-${{ matrix.target }}
+
+      - name: upload assets
+        if: ${{ matrix.target == 'x86_64-pc-windows-gnu' }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: tcpping-${{ matrix.target }}.exe
+          path: tcpping-${{ matrix.target }}.exe
+
+      - name: upload assets
+        if: ${{ matrix.target != 'x86_64-pc-windows-gnu' }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: tcpping-${{ matrix.target }}
+          path: tcpping-${{ matrix.target }}
+
+  build-bin-local:
+    strategy:
+      matrix:
+        os: [macos-latest]
+        include:
+          - os: macos-latest
+            target: x86_64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - name: install rust toolchain
+        uses: hecrj/setup-rust-action@v1
+        with:
+          rust-version: nightly
+
+      - name: install llvm
+        if: ${{ matrix.os == 'macos-latest' }}
+        run: |
+          brew update
+
+      - name: build
+        run: |
+          cargo build --release --target ${{ matrix.target }}
+
+      - name: rename and compress artifacts
+        run: |
+          mv target/${{ matrix.target }}/release/tcpping tcpping-${{ matrix.target }}
+
+      - name: upload assets
+        uses: actions/upload-artifact@v2
+        with:
+          name: tcpping-${{ matrix.target }}
+          path: tcpping-${{ matrix.target }}
+
+  create-release:
+    needs: [build-bin-cross, build-bin-local]
+    runs-on: macos-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
+
+      - name: create upload url file
+        run: |
+          echo -n "${{ steps.create_release.outputs.upload_url }}" > upload_url.txt
+
+      - name: persist upload url
+        uses: actions/upload-artifact@v2
+        with:
+          name: upload_url.txt
+          path: ./upload_url.txt
+
+  release-bin:
+    needs: [create-release]
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-apple-darwin
+          - mips-unknown-linux-musl
+            #          - mipsel-unknown-linux-musl
+          - x86_64-unknown-linux-musl
+            #          - i686-unknown-linux-musl
+          - aarch64-unknown-linux-musl
+            #          - arm-unknown-linux-musleabi
+            #          - armv7-unknown-linux-musleabihf
+          - x86_64-pc-windows-gnu
+    steps:
+      - name: download upload url
+        uses: actions/download-artifact@v2
+        with:
+          name: upload_url.txt
+
+      - name: get upload url
+        run: |
+          upload_url=`cat upload_url.txt`
+          echo "uploadurl=$upload_url" >> $GITHUB_ENV
+
+      - name: download asset
+        if: ${{ matrix.target != 'x86_64-pc-windows-gnu' }}
+        uses: actions/download-artifact@v2
+        with:
+          name: tcpping-${{ matrix.target }}
+
+      - name: download asset
+        if: ${{ matrix.target == 'x86_64-pc-windows-gnu' }}
+        uses: actions/download-artifact@v2
+        with:
+          name: tcpping-${{ matrix.target }}.exe
+
+      - name: zip artifacts
+        if: ${{ matrix.target != 'x86_64-pc-windows-gnu' }}
+        run: |
+          gzip tcpping-${{ matrix.target }}
+
+      - name: zip artifacts
+        if: ${{ matrix.target == 'x86_64-pc-windows-gnu' }}
+        run: |
+          zip -9 tcpping-${{ matrix.target }}.zip tcpping-${{ matrix.target }}.exe
+
+      - name: upload asset
+        if: ${{ matrix.target != 'x86_64-pc-windows-gnu' }}
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ env.uploadurl }}
+          asset_path: ./tcpping-${{ matrix.target }}.gz
+          asset_name: tcpping-${{ matrix.target }}.gz
+          asset_content_type: application/octet-stream
+
+      - name: upload asset
+        if: ${{ matrix.target == 'x86_64-pc-windows-gnu' }}
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ env.uploadurl }}
+          asset_path: ./tcpping-${{ matrix.target }}.zip
+          asset_name: tcpping-${{ matrix.target }}.zip
+          asset_content_type: application/octet-stream
