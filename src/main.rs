@@ -1,5 +1,5 @@
 use std::io;
-use std::net::SocketAddr;
+use std::net::{SocketAddr, ToSocketAddrs};
 use std::time::Duration;
 
 use argh::FromArgs;
@@ -20,7 +20,7 @@ struct TcpPing {
     /// handshake timeout (Default 4)
     #[argh(option, short = 't', default = "4")]
     timeout: u64,
-    /// bound interface (Unix only)
+    /// bound interface, this does not apply to DNS resolution (Unix only)
     #[argh(option, short = 'b')]
     boundif: Option<String>,
 }
@@ -78,7 +78,12 @@ fn bind_socket(socket: &Socket, iface: Option<&String>) -> io::Result<()> {
 
 fn main() {
     let args: TcpPing = argh::from_env();
-    let addr: SocketAddr = format!("{}:{}", args.host, args.port).parse().unwrap();
+    let addr: SocketAddr = format!("{}:{}", args.host, args.port)
+        .to_socket_addrs()
+        .unwrap()
+        .filter(|a| a.is_ipv4())
+        .next()
+        .unwrap();
     let timeout: Duration = Duration::from_secs(args.timeout);
     loop {
         let start = std::time::Instant::now();
