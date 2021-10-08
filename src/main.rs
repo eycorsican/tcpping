@@ -20,6 +20,9 @@ struct TcpPing {
     /// handshake timeout (Default 4)
     #[argh(option, short = 't', default = "4")]
     timeout: u64,
+    /// stop after sending N pings
+    #[argh(option, short = 'c')]
+    count: Option<usize>,
     /// bound interface, this does not apply to DNS resolution (Unix only)
     #[argh(option, short = 'b')]
     boundif: Option<String>,
@@ -85,11 +88,13 @@ fn main() {
         .next()
         .unwrap();
     let timeout: Duration = Duration::from_secs(args.timeout);
+    let mut total_pings = 0;
     loop {
         let start = std::time::Instant::now();
         let socket = Socket::new(Domain::IPV4, Type::STREAM, None).unwrap();
         if let Err(e) = bind_socket(&socket, args.boundif.as_ref()) {
             println!("Bind socket failed: {}", e);
+            std::process::exit(1);
         }
         let res = socket.connect_timeout(&addr.into(), timeout);
         let elapsed = std::time::Instant::now().duration_since(start);
@@ -99,6 +104,12 @@ fn main() {
             }
             Err(e) => {
                 println!("Connect to {} failed: {}", &addr, e);
+            }
+        }
+        total_pings += 1;
+        if let Some(c) = args.count {
+            if total_pings >= c {
+                std::process::exit(0);
             }
         }
         std::thread::sleep(std::time::Duration::from_secs(args.interval));
