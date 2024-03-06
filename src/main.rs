@@ -28,7 +28,7 @@ struct TcpPing {
     boundif: Option<String>,
 }
 
-fn bind_socket(socket: &Socket, iface: Option<&String>) -> io::Result<()> {
+fn bind_socket(socket: &Socket, iface: Option<&String>, indicator: &SocketAddr) -> io::Result<()> {
     if let Some(iface) = iface {
         #[cfg(target_os = "macos")]
         unsafe {
@@ -76,7 +76,11 @@ fn bind_socket(socket: &Socket, iface: Option<&String>) -> io::Result<()> {
             return Err(io::Error::new(io::ErrorKind::Other, "not supported"));
         }
     }
-    socket.bind(&"0.0.0.0:0".parse::<SocketAddr>().unwrap().into())
+    match indicator {
+        SocketAddr::V4(..) => socket.bind(&"0.0.0.0:0".parse::<SocketAddr>().unwrap().into())?,
+        SocketAddr::V6(..) => socket.bind(&"[::]:0".parse::<SocketAddr>().unwrap().into())?,
+    }
+    Ok(())
 }
 
 fn main() {
@@ -84,15 +88,17 @@ fn main() {
     let addr: SocketAddr = format!("{}:{}", args.host, args.port)
         .to_socket_addrs()
         .unwrap()
-        .filter(|a| a.is_ipv4())
         .next()
         .unwrap();
     let timeout: Duration = Duration::from_secs(args.timeout);
     let mut total_pings = 0;
     loop {
         let start = std::time::Instant::now();
-        let socket = Socket::new(Domain::IPV4, Type::STREAM, None).unwrap();
-        if let Err(e) = bind_socket(&socket, args.boundif.as_ref()) {
+        let socket = match addr {
+            SocketAddr::V4(..) => Socket::new(Domain::IPV4, Type::STREAM, None).unwrap(),
+            SocketAddr::V6(..) => Socket::new(Domain::IPV6, Type::STREAM, None).unwrap(),
+        };
+        if let Err(e) = bind_socket(&socket, args.boundif.as_ref(), &addr) {
             println!("Bind socket failed: {}", e);
             std::process::exit(1);
         }
