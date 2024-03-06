@@ -1,4 +1,5 @@
 use std::io;
+use std::net::IpAddr;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::time::Duration;
 
@@ -85,11 +86,15 @@ fn bind_socket(socket: &Socket, iface: Option<&String>, indicator: &SocketAddr) 
 
 fn main() {
     let args: TcpPing = argh::from_env();
-    let addr: SocketAddr = format!("{}:{}", args.host, args.port)
-        .to_socket_addrs()
-        .unwrap()
-        .next()
-        .unwrap();
+    let addr = match args.host.parse::<IpAddr>() {
+        Ok(ip) => SocketAddr::new(ip, args.port),
+        Err(_) => format!("{}:{}", args.host, args.port)
+            .to_socket_addrs()
+            .unwrap()
+            .next()
+            .unwrap(),
+    };
+    println!("Parsed address {}", &addr);
     let timeout: Duration = Duration::from_secs(args.timeout);
     let mut total_pings = 0;
     loop {
