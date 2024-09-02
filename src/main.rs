@@ -1,4 +1,5 @@
 use std::io;
+use std::io::{Read, Write};
 use std::net::IpAddr;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::time::Duration;
@@ -27,6 +28,9 @@ struct TcpPing {
     /// bound interface, this does not apply to DNS resolution (Unix only)
     #[argh(option, short = 'b')]
     boundif: Option<String>,
+    /// send a payload on each TCP ping and read up to 1024 bytes response
+    #[argh(option)]
+    payload: Option<String>,
 }
 
 fn bind_socket(socket: &Socket, iface: Option<&String>, indicator: &SocketAddr) -> io::Result<()> {
@@ -117,6 +121,20 @@ fn main() {
                 println!("Connect to {} failed: {}", &addr, e);
             }
         }
+        let mut stream: std::net::TcpStream = socket.into();
+
+        if let Some(ref payload) = args.payload {
+            stream.write_all(payload.as_bytes()).unwrap();
+            let mut buf = vec![0; 1024];
+            let n = stream.read(&mut buf).unwrap();
+            println!(
+                "Read {} bytes from {}: {}",
+                n,
+                &addr,
+                String::from_utf8_lossy(&buf[..n])
+            );
+        }
+
         total_pings += 1;
         if let Some(c) = args.count {
             if total_pings >= c {
