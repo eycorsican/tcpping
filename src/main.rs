@@ -10,6 +10,9 @@ use socket2::{Domain, Socket, Type};
 #[derive(FromArgs)]
 /// TCP ping utility.
 struct TcpPing {
+    /// use UDP, must set a payload and the server msut echo back something
+    #[argh(switch)]
+    udp: bool,
     /// target host
     #[argh(positional)]
     host: String,
@@ -101,6 +104,45 @@ fn main() {
     println!("Parsed address {}", &addr);
     let timeout: Duration = Duration::from_secs(args.timeout);
     let mut total_pings = 0;
+
+    if args.udp {
+        if let Some(ref payload) = args.payload {
+            loop {
+                let start = std::time::Instant::now();
+                let socket = match addr {
+                    SocketAddr::V4(..) => Socket::new(Domain::IPV4, Type::DGRAM, None).unwrap(),
+                    SocketAddr::V6(..) => Socket::new(Domain::IPV6, Type::DGRAM, None).unwrap(),
+                };
+                if let Err(e) = bind_socket(&socket, args.boundif.as_ref(), &addr) {
+                    println!("Bind socket failed: {}", e);
+                    std::process::exit(1);
+                }
+                let socket: std::net::UdpSocket = socket.into();
+                let n = socket.send_to(payload.as_bytes(), &addr).unwrap();
+                println!("UDP sent {} bytes: {}", n, payload);
+                let mut buf = vec![0; 2 * 1024];
+                let (n, raddr) = socket.recv_from(&mut buf).unwrap();
+                let elapsed = std::time::Instant::now().duration_since(start);
+                println!(
+                    "UDP received {} bytes from {} in {} ms: {}",
+                    n,
+                    raddr,
+                    elapsed.as_millis(),
+                    String::from_utf8_lossy(&buf)
+                );
+
+                total_pings += 1;
+                if let Some(c) = args.count {
+                    if total_pings >= c {
+                        std::process::exit(0);
+                    }
+                }
+                std::thread::sleep(std::time::Duration::from_secs(args.interval));
+            }
+        }
+        return;
+    }
+
     loop {
         let start = std::time::Instant::now();
         let socket = match addr {
