@@ -119,14 +119,21 @@ fn main() {
                 }
                 let socket: std::net::UdpSocket = socket.into();
                 let n = socket.send_to(payload.as_bytes(), &addr).unwrap();
-                println!("UDP sent {} bytes: {}", n, payload);
+                println!(
+                    "UDP {} -> {} sent {} bytes: {}",
+                    socket.local_addr().unwrap(),
+                    addr,
+                    n,
+                    payload
+                );
                 let mut buf = vec![0; 2 * 1024];
                 let (n, raddr) = socket.recv_from(&mut buf).unwrap();
                 let elapsed = std::time::Instant::now().duration_since(start);
                 println!(
-                    "UDP received {} bytes from {} in {} ms: {}",
-                    n,
+                    "UDP {} <- {} received {} bytes in {} ms: {}",
+                    socket.local_addr().unwrap(),
                     raddr,
+                    n,
                     elapsed.as_millis(),
                     String::from_utf8_lossy(&buf)
                 );
@@ -155,15 +162,20 @@ fn main() {
         }
         let res = socket.connect_timeout(&addr.into(), timeout);
         let elapsed = std::time::Instant::now().duration_since(start);
+        let mut stream: std::net::TcpStream = socket.into();
         match res {
             Ok(_) => {
-                println!("Connected to {} in {} ms", &addr, elapsed.as_millis());
+                println!(
+                    "Connected {} <-> {} in {} ms",
+                    stream.local_addr().unwrap(),
+                    &addr,
+                    elapsed.as_millis()
+                );
             }
             Err(e) => {
                 println!("Connect to {} failed: {}", &addr, e);
             }
         }
-        let mut stream: std::net::TcpStream = socket.into();
 
         if let Some(ref payload) = args.payload {
             stream.write_all(payload.as_bytes()).unwrap();
