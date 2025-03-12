@@ -127,6 +127,7 @@ fn main() {
                     payload
                 );
                 let mut buf = vec![0; 2 * 1024];
+                socket.set_read_timeout(Some(timeout)).unwrap();
                 let (n, raddr) = socket.recv_from(&mut buf).unwrap();
                 let elapsed = std::time::Instant::now().duration_since(start);
                 println!(
