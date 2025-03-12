@@ -128,24 +128,35 @@ fn main() {
                 );
                 let mut buf = vec![0; 2 * 1024];
                 socket.set_read_timeout(Some(timeout)).unwrap();
-                let (n, raddr) = socket.recv_from(&mut buf).unwrap();
-                let elapsed = std::time::Instant::now().duration_since(start);
-                println!(
-                    "UDP {} <- {} received {} bytes in {} ms: {}",
-                    socket.local_addr().unwrap(),
-                    raddr,
-                    n,
-                    elapsed.as_millis(),
-                    String::from_utf8_lossy(&buf)
-                );
+                match socket.recv_from(&mut buf) {
+                    Ok((n, raddr)) => {
+                        let elapsed = std::time::Instant::now().duration_since(start);
+                        println!(
+                            "UDP {} <- {} received {} bytes in {} ms: {}",
+                            socket.local_addr().unwrap(),
+                            raddr,
+                            n,
+                            elapsed.as_millis(),
+                            String::from_utf8_lossy(&buf)
+                        );
 
-                total_pings += 1;
-                if let Some(c) = args.count {
-                    if total_pings >= c {
-                        std::process::exit(0);
+                        total_pings += 1;
+                        if let Some(c) = args.count {
+                            if total_pings >= c {
+                                std::process::exit(0);
+                            }
+                        }
+                        std::thread::sleep(std::time::Duration::from_secs(args.interval));
+                    }
+                    Err(e) => {
+                        if e.kind() == io::ErrorKind::TimedOut {
+                            println!("Timed out");
+                            continue;
+                        } else {
+                            panic!("Failed: {:?}", e);
+                        }
                     }
                 }
-                std::thread::sleep(std::time::Duration::from_secs(args.interval));
             }
         }
         return;
