@@ -206,6 +206,8 @@ fn main() {
             );
         }
 
+        stream.shutdown(std::net::Shutdown::Both).unwrap();
+
         std::thread::sleep(std::time::Duration::from_secs(args.wait));
 
         total_pings += 1;
