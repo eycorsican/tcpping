@@ -22,6 +22,9 @@ struct TcpPing {
     /// ping interval (Default 1)
     #[argh(option, short = 'i', default = "1")]
     interval: u64,
+    /// wait time after a ping (Default 0)
+    #[argh(option, short = 'w', default = "0")]
+    wait: u64,
     /// handshake timeout (Default 4)
     #[argh(option, short = 't', default = "4")]
     timeout: u64,
@@ -140,6 +143,8 @@ fn main() {
                             String::from_utf8_lossy(&buf)
                         );
 
+                        std::thread::sleep(std::time::Duration::from_secs(args.wait));
+
                         total_pings += 1;
                         if let Some(c) = args.count {
                             if total_pings >= c {
@@ -200,6 +205,8 @@ fn main() {
                 String::from_utf8_lossy(&buf[..n])
             );
         }
+
+        std::thread::sleep(std::time::Duration::from_secs(args.wait));
 
         total_pings += 1;
         if let Some(c) = args.count {
